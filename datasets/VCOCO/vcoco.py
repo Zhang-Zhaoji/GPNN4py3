@@ -36,7 +36,7 @@ class VCOCO(torch.utils.data.Dataset):
     def __getitem__(self, index):
         img_name = self.coco.loadImgs(ids=[self.unique_image_ids[index]])[0]['file_name']
         try:
-            data = pickle.load(open(os.path.join(self.root, '{}.p'.format(img_name)), 'rb'))
+            data = pickle.load(open(os.path.join(self.root, '{}.p'.format(img_name)), 'rb'),encoding='latin1')
             edge_features = np.load(os.path.join(self.root, '{}_edge_features.npy').format(img_name))
             node_features = np.load(os.path.join(self.root, '{}_node_features.npy').format(img_name))
         except IOError:
@@ -61,7 +61,8 @@ def main(args):
     start_time = time.time()
 
     subset = ['train', 'val', 'test']
-    training_set = VCOCO(os.path.join(args.data_root, 'processed'), subset[0])
+    #training_set = VCOCO(os.path.join(args.data_root, 'processed'), subset[0])
+    training_set = VCOCO(os.path.join(args.data_root, 'vcoco_features'), subset[0])
     print('{} instances.'.format(len(training_set)))
     edge_features, node_features, adj_mat, node_labels, node_roles, img_name = training_set[0]
     print('Time elapsed: {:.2f}s'.format(time.time() - start_time))

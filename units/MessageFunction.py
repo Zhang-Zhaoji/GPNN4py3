@@ -122,7 +122,7 @@ class MessageFunction(torch.nn.Module):
     def init_linear_concat_relu(self):
         edge_feature_size = self.args['edge_feature_size']
         node_feature_size = self.args['node_feature_size']
-        message_size = self.args['message_size']/2
+        message_size = int(self.args['message_size']/2)
         self.learn_modules.append(torch.nn.Linear(edge_feature_size, message_size, bias=True))
         self.learn_modules.append(torch.nn.Linear(node_feature_size, message_size, bias=True))
 

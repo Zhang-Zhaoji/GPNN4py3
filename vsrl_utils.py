@@ -23,8 +23,11 @@ import os, json
 coco = []
 
 def get_data_dir():
+  # TODO
+  # need seet True dir place for instances_vcoco_all_2014.json
   this_dir = os.path.dirname(__file__)
   dir_name = os.path.join(this_dir, 'data') 
+  dir_name = 'e:\\gpnn\\gpnn\\tmp\\vcoco'
   return dir_name
 
 def load_coco(dir_name=None):
@@ -38,7 +41,7 @@ def load_coco(dir_name=None):
 def load_vcoco(imset, dir_name=None):
   if dir_name is None:
     dir_name = get_data_dir()
-  with open(os.path.join(dir_name, 'vcoco', imset + '.json'), 'rt') as f:
+  with open(os.path.join(dir_name, imset + '.json'), 'rt') as f:
     vsrl_data = json.load(f)
   vsrl_data = unicode_to_str(vsrl_data)
   for i in range(len(vsrl_data)):
@@ -49,7 +52,7 @@ def load_vcoco(imset, dir_name=None):
   return vsrl_data
 
 def coco_ann_id_to_image_id(ann_id, coco):
-  ann = coco.loadAnns(ann_id);
+  ann = coco.loadAnns(ann_id)
   ann_id_r = [a['id'] for a in ann]
   image_id_r = [a['image_id'] for a in ann]
   assert ann_id_r == ann_id, \
@@ -60,7 +63,8 @@ def coco_ann_id_to_image_id(ann_id, coco):
 # Attach relevant boxes
 def all_relevant_objects(vsrl_data_all, coco):
   vsrl_relevant_objects = []
-  for i in xrange(len(vsrl_data_all)):
+  #for i in xrange(len(vsrl_data_all)):
+  for i in range(len(vsrl_data_all)):
       v_i = vsrl_data_all[i]
       bbox = []; image_id = [];
       num_roles = len(v_i['role_name'])
@@ -118,14 +122,14 @@ def remove_negative(vsrl_data):
 
 def xyhw_to_xyxy(bbox):
   out = bbox.copy()
-  out[:, [2, 3]] = bbox[:, [0,1]] + bbox[:, [2,3]];
+  out[:, [2, 3]] = bbox[:, [0,1]] + bbox[:, [2,3]]
   return out
 
 def attach_gt_boxes(vsrl_data, coco):
   """
   def vsrl_data = attach_gt_boxes(vsrl_data, coco)
   """
-  anns = coco.loadAnns(vsrl_data['ann_id'].ravel().tolist());
+  anns = coco.loadAnns(vsrl_data['ann_id'].ravel().tolist())
   bbox = np.vstack([np.array(a['bbox']).reshape((1,4)) for a in anns])
 
   vsrl_data['bbox'] = xyhw_to_xyxy(bbox)
@@ -137,18 +141,18 @@ def attach_gt_boxes(vsrl_data, coco):
   for i in range(vsrl_data['role_object_id'].shape[1]):
     has_role = np.where(vsrl_data['role_object_id'][:,i] > 0)[0]
     if has_role.size > 0:
-      anns = coco.loadAnns(vsrl_data['role_object_id'][has_role, i].ravel().tolist());
+      anns = coco.loadAnns(vsrl_data['role_object_id'][has_role, i].ravel().tolist())
       bbox = np.vstack([np.array(a['bbox']).reshape((1,4)) for a in anns])
       bbox = xyhw_to_xyxy(bbox)
-      vsrl_data['role_bbox'][has_role, 4*i:4*(i+1)] = bbox;
+      vsrl_data['role_bbox'][has_role, 4*i:4*(i+1)] = bbox
   return vsrl_data
 
 def unicode_to_str(input):
   if isinstance(input, dict):
-    return {unicode_to_str(key):unicode_to_str(value) for key,value in input.iteritems()}
+    return {unicode_to_str(key):unicode_to_str(value) for key,value in input.items()}
   elif isinstance(input, list):
     return [unicode_to_str(element) for element in input]
-  elif isinstance(input, unicode):
-    return input.encode('utf-8')
+  #elif isinstance(input, unicode):
+  #  return input.encode('utf-8')
   else:
     return input

@@ -33,6 +33,8 @@ class VCOCOeval(object):
     coco_annot_file: path to the coco annotations
     split_file: image ids for split
     """
+    print(coco_annot_file)
+    coco_annot_file = coco_annot_file.replace("/","\\")
     self.COCO = COCO(coco_annot_file)
     self.VCOCO = _load_vcoco(vsrl_annot_file)
     self.image_ids = np.loadtxt(open(split_file, 'r'))
@@ -84,7 +86,7 @@ class VCOCOeval(object):
 
   def _prep_vcocodb_entry(self, entry):
     entry['boxes'] = np.empty((0, 4), dtype=np.float32)
-    entry['is_crowd'] = np.empty((0), dtype=np.bool)
+    entry['is_crowd'] = np.empty((0), dtype=np.bool_)
     entry['gt_classes'] = np.empty((0), dtype=np.int32)
     entry['gt_actions'] = np.empty((0, self.num_actions), dtype=np.int32)
     entry['gt_role_id'] = np.empty((0, self.num_actions, 2), dtype=np.int32)

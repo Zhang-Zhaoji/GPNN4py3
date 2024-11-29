@@ -17,13 +17,16 @@ import torch
 import torch.autograd
 import sklearn.metrics
 
-import datasets
+import datasets as dts # or would be confused with torchdataset?
+from datasets.utils import load_best_checkpoint
+
 import units
 import models
 
 import config
 import logutil
 import utils
+
 from datasets.HICO import metadata
 import scipy.io as sio
 import matplotlib.pyplot as plt
@@ -127,7 +130,7 @@ def main(args):
         mse_loss = mse_loss.cuda()
         multi_label_loss = multi_label_loss.cuda()
 
-    loaded_checkpoint = datasets.utils.load_best_checkpoint(args, model, optimizer)
+    loaded_checkpoint = load_best_checkpoint(args, model, optimizer)
     if loaded_checkpoint:
         args, best_epoch_error, avg_epoch_error, model, optimizer = loaded_checkpoint
 
@@ -156,14 +159,14 @@ def main(args):
                 param_group['lr'] = args.lr
         is_best = True
         best_epoch_error = min(epoch_error, best_epoch_error)
-        datasets.utils.save_checkpoint({'epoch': epoch + 1, 'state_dict': model.state_dict(),
+        dts.utils.save_checkpoint({'epoch': epoch + 1, 'state_dict': model.state_dict(),
                                         'best_epoch_error': best_epoch_error, 'avg_epoch_error': avg_epoch_error,
                                         'optimizer': optimizer.state_dict(), },
                                        is_best=is_best, directory=args.resume)
         print('best_epoch_error: {}, avg_epoch_error: {}'.format(best_epoch_error,  avg_epoch_error))
 
     # For testing
-    loaded_checkpoint = datasets.utils.load_best_checkpoint(args, model, optimizer)
+    loaded_checkpoint = load_best_checkpoint(args, model, optimizer)
     if loaded_checkpoint:
         args, best_epoch_error, avg_epoch_error, model, optimizer = loaded_checkpoint
 
@@ -340,7 +343,7 @@ def gen_test_result(args, test_loader, model, mse_loss, multi_label_loss, img_in
         node_features = utils.to_variable(node_features, args.cuda)
         adj_mat = utils.to_variable(adj_mat, args.cuda)
         node_labels = utils.to_variable(node_labels, args.cuda)
-        if sequence_ids[0] is 'HICO_test2015_00000396':
+        if sequence_ids[0] == 'HICO_test2015_00000396':
             break
 
         pred_adj_mat, pred_node_labels = model(edge_features, node_features, adj_mat, node_labels, human_nums, obj_nums, args)
@@ -364,7 +367,7 @@ def gen_test_result(args, test_loader, model, mse_loss, multi_label_loss, img_in
 
     for obj_idx, save_info in filtered_hoi.items():
         obj_start, obj_end = metadata.obj_hoi_index[obj_idx]
-        obj_arr = np.empty((obj_end - obj_start + 1, len(img_index)), dtype=np.object)
+        obj_arr = np.empty((obj_end - obj_start + 1, len(img_index)), dtype=np.object_)
         for row in range(obj_arr.shape[0]):
             for col in range(obj_arr.shape[1]):
                 obj_arr[row][col] = []

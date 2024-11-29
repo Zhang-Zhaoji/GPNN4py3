@@ -27,7 +27,7 @@ class Paths(object):
 
         self.cad_data_root = 'E:\\gpnn\\gpnn\\tmp\\cad120'
         # self.hico_data_root = os.path.join(self.project_root, 'tmp', 'hico')
-        self.vcoco_data_root = 'E:\\gpnn\\gpnn\\tmp\\vcoco'
+        self.vcoco_data_root = 'E:\\gpnn\\gpnn\\tmp\\vcoco\\vcoco_features\\vcoco_features'
 
 
 def set_logger(name='learner.log'):

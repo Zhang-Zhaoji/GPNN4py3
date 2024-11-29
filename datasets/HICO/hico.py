@@ -25,7 +25,7 @@ class HICO(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         sequence_id = self.sequence_ids[index]
-        data = pickle.load(open(os.path.join(self.root, '{}.p'.format(sequence_id)), 'rb'))
+        data = pickle.load(open(os.path.join(self.root, '{}.p'.format(sequence_id)), 'rb'),encoding='latin1')
         # edge_features = data['edge_features']
         # node_features = data['node_features']
 
