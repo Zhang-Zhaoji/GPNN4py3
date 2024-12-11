@@ -6,6 +6,8 @@ Created on Oct 05, 2017
 Description of the file.
 
 """
+# 不想要看到太多的Warnings，虽然不影响训练
+import warnings
 
 import os
 import argparse
@@ -31,6 +33,43 @@ from datasets.HICO import metadata
 import scipy.io as sio
 import matplotlib.pyplot as plt
 import scipy
+
+import shutil
+def save_checkpoint(state, is_best, directory):
+    if not os.path.isdir(directory):
+        os.makedirs(directory)
+    checkpoint_file = os.path.join(directory, 'checkpoint.pth')
+    best_model_file = os.path.join(directory, 'model_best.pth')
+    torch.save(state, checkpoint_file)
+    if is_best:
+        shutil.copyfile(checkpoint_file, best_model_file)
+
+def load_best_checkpoint(args, model, optimizer):
+    # get the best checkpoint if available without training
+    if args.resume:
+        checkpoint_dir = args.resume
+        best_model_file = os.path.join(checkpoint_dir, 'model_best.pth')
+        if not os.path.isdir(checkpoint_dir):
+            os.makedirs(checkpoint_dir)
+        if os.path.isfile(best_model_file):
+            print("=> loading best model '{}'".format(best_model_file))
+            checkpoint = torch.load(best_model_file,encoding='latin1')
+            # checkpoint_str = {key.decode('latin1'): value for key, value in checkpoint.items()}
+            args.start_epoch = checkpoint['epoch']
+            best_epoch_error = checkpoint['best_epoch_error']
+            try:
+                avg_epoch_error = checkpoint['avg_epoch_error']
+            except KeyError:
+                avg_epoch_error = np.inf
+            model.load_state_dict(checkpoint['state_dict'])
+            optimizer.load_state_dict(checkpoint['optimizer'])
+            if args.cuda:
+                model.cuda()
+            print("=> loaded best model '{}' (epoch {})".format(best_model_file, checkpoint['epoch']))
+            return args, best_epoch_error, avg_epoch_error, model, optimizer
+        else:
+            print("=> no best model found at '{}'".format(best_model_file))
+    return None
 
 
 action_class_num = 117
@@ -94,8 +133,10 @@ def loss_fn(pred_adj_mat, adj_mat, pred_node_labels, node_labels, mse_loss, mult
 
 def compute_mean_avg_prec(y_true, y_score):
     try:
-        avg_prec = sklearn.metrics.average_precision_score(y_true, y_score, average=None)
-        mean_avg_prec = np.nansum(avg_prec) / len(avg_prec)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            avg_prec = sklearn.metrics.average_precision_score(y_true, y_score, average=None)
+            mean_avg_prec = np.nansum(avg_prec) / len(avg_prec)
     except ValueError:
         mean_avg_prec = 0
 
@@ -123,16 +164,16 @@ def main(args):
     model = models.GPNN_HICO(model_args)
     del edge_features, node_features, adj_mat, node_labels
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-    mse_loss = torch.nn.MSELoss(size_average=True)
-    multi_label_loss = torch.nn.MultiLabelSoftMarginLoss(size_average=True)
+    mse_loss = torch.nn.MSELoss(reduction='mean')
+    multi_label_loss = torch.nn.MultiLabelSoftMarginLoss(reduction='mean')
     if args.cuda:
         model = model.cuda()
         mse_loss = mse_loss.cuda()
         multi_label_loss = multi_label_loss.cuda()
 
-    loaded_checkpoint = load_best_checkpoint(args, model, optimizer)
-    if loaded_checkpoint:
-        args, best_epoch_error, avg_epoch_error, model, optimizer = loaded_checkpoint
+    #loaded_checkpoint = load_best_checkpoint(args, model, optimizer)
+    #if loaded_checkpoint:
+    #    args, best_epoch_error, avg_epoch_error, model, optimizer = loaded_checkpoint
 
     epoch_errors = list()
     avg_epoch_error = np.inf
@@ -159,7 +200,7 @@ def main(args):
                 param_group['lr'] = args.lr
         is_best = True
         best_epoch_error = min(epoch_error, best_epoch_error)
-        dts.utils.save_checkpoint({'epoch': epoch + 1, 'state_dict': model.state_dict(),
+        save_checkpoint({'epoch': epoch + 1, 'state_dict': model.state_dict(),
                                         'best_epoch_error': best_epoch_error, 'avg_epoch_error': avg_epoch_error,
                                         'optimizer': optimizer.state_dict(), },
                                        is_best=is_best, directory=args.resume)
@@ -206,7 +247,7 @@ def train(train_loader, model, mse_loss, multi_label_loss, optimizer, epoch, log
         if len(det_indices) > 0:
             y_true, y_score = evaluation(det_indices, pred_node_labels, node_labels, y_true, y_score)
 
-        losses.update(loss.data[0], edge_features.size()[0])
+        losses.update(loss.item(), edge_features.size()[0])
         loss.backward()
         optimizer.step()
 
@@ -263,7 +304,7 @@ def validate(val_loader, model, mse_loss, multi_label_loss, logger=None, test=Fa
 
         # Log
         if len(det_indices) > 0:
-            losses.update(loss.data[0], len(det_indices))
+            losses.update(loss.item(), len(det_indices))
             y_true, y_score = evaluation(det_indices, pred_node_labels, node_labels, y_true, y_score, test=test)
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -407,11 +448,11 @@ def parse_arguments():
     parser.add_argument('--vis-top-k', type=int, default=1, metavar='N', help='Top k results to visualize')
 
     # Optimization Options
-    parser.add_argument('--batch-size', type=int, default=1, metavar='N',
+    parser.add_argument('--batch-size', type=int, default=32, metavar='N',
                         help='Input batch size for training (default: 10)')
     parser.add_argument('--no-cuda', action='store_true', default=False,
                         help='Enables CUDA training')
-    parser.add_argument('--epochs', type=int, default=0, metavar='N',
+    parser.add_argument('--epochs', type=int, default=30, metavar='N',
                         help='Number of epochs to train (default: 10)')
     parser.add_argument('--start-epoch', type=int, default=0, metavar='N',
                         help='Index of epoch to start (default: 0)')
@@ -425,10 +466,10 @@ def parse_arguments():
                         help='SGD momentum (default: 0.9)')
 
     # i/o
-    parser.add_argument('--log-interval', type=int, default=50, metavar='N',
+    parser.add_argument('--log-interval', type=int, default=40, metavar='N',
                         help='How many batches to wait before logging training status')
     # Accelerating
-    parser.add_argument('--prefetch', type=int, default=0, help='Pre-fetching threads.')
+    parser.add_argument('--prefetch', type=int, default=8, help='Pre-fetching threads.')
 
     return parser.parse_args()
 

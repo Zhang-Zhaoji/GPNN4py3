@@ -74,9 +74,9 @@ def main(args):
         model = model.cuda()
         criterion = criterion.cuda()
 
-    loaded_checkpoint = load_best_checkpoint(args, model, optimizer)
-    if loaded_checkpoint:
-        args, best_epoch_error, avg_epoch_error, model, optimizer = loaded_checkpoint
+    #loaded_checkpoint = load_best_checkpoint(args, model, optimizer)
+    #if loaded_checkpoint:
+    #    args, best_epoch_error, avg_epoch_error, model, optimizer = loaded_checkpoint
 
     epoch_errors = list()
     avg_epoch_error = np.inf
@@ -143,7 +143,7 @@ def train(train_loader, model, criterion, optimizer, epoch, logger, args=None):
         train_loss = criterion(pred_node_labels, node_labels)
 
         # Log
-        losses.update(train_loss.data[0], edge_features.size(0))
+        losses.update(train_loss.item(), edge_features.size(0))
         error_rate, total_nodes, predictions, ground_truth = evaluation(pred_node_labels[:, [0], :], node_labels[:, [0], :])
         subactivity_error_ratio.update(error_rate, total_nodes)
         error_rate, total_nodes, predictions, ground_truth = evaluation(pred_node_labels[:, 1:, :], node_labels[:, 1:, :])
@@ -281,7 +281,7 @@ def parse_arguments():
                         help='Input batch size for training (default: 10)')
     parser.add_argument('--no-cuda', action='store_true', default=False,
                         help='Enables CUDA training')
-    parser.add_argument('--epochs', type=int, default=0, metavar='N',
+    parser.add_argument('--epochs', type=int, default=10, metavar='N',
                         help='Number of epochs to train (default: 10)')
     parser.add_argument('--start-epoch', type=int, default=0, metavar='N',
                         help='Index of epoch to start (default: 0)')
@@ -293,7 +293,7 @@ def parse_arguments():
                         help='SGD momentum (default: 0.9)')
 
     # i/o
-    parser.add_argument('--log-interval', type=int, default=10, metavar='N',
+    parser.add_argument('--log-interval', type=int, default=0, metavar='N',
                         help='How many batches to wait before logging training status')
     # Accelerating
     parser.add_argument('--prefetch', type=int, default=0, help='Pre-fetching threads.')

@@ -12,6 +12,7 @@ import argparse
 import time
 import datetime
 import pickle
+import shutil
 
 import numpy as np
 import torch
@@ -26,6 +27,43 @@ import models
 import config
 import logutil
 import utils
+
+def save_checkpoint(state, is_best, directory):
+    if not os.path.isdir(directory):
+        os.makedirs(directory)
+    checkpoint_file = os.path.join(directory, 'checkpoint.pth')
+    best_model_file = os.path.join(directory, 'model_best.pth')
+    torch.save(state, checkpoint_file)
+    if is_best:
+        shutil.copyfile(checkpoint_file, best_model_file)
+        
+
+def load_best_checkpoint(args, model, optimizer):
+    # get the best checkpoint if available without training
+    if args.resume:
+        checkpoint_dir = args.resume
+        best_model_file = os.path.join(checkpoint_dir, 'model_best.pth')
+        if not os.path.isdir(checkpoint_dir):
+            os.makedirs(checkpoint_dir)
+        if os.path.isfile(best_model_file):
+            print("=> loading best model '{}'".format(best_model_file))
+            checkpoint = torch.load(best_model_file,encoding='latin1')
+            # checkpoint_str = {key.decode('latin1'): value for key, value in checkpoint.items()}
+            args.start_epoch = checkpoint['epoch']
+            best_epoch_error = checkpoint['best_epoch_error']
+            try:
+                avg_epoch_error = checkpoint['avg_epoch_error']
+            except KeyError:
+                avg_epoch_error = np.inf
+            model.load_state_dict(checkpoint['state_dict'])
+            optimizer.load_state_dict(checkpoint['optimizer'])
+            if args.cuda:
+                model.cuda()
+            print("=> loaded best model '{}' (epoch {})".format(best_model_file, checkpoint['epoch']))
+            return args, best_epoch_error, avg_epoch_error, model, optimizer
+        else:
+            print("=> no best model found at '{}'".format(best_model_file))
+    return None
 
 action_class_num = len(datasets.vcoco_metadata.action_classes)
 roles_num = len(datasets.vcoco_metadata.roles)
@@ -180,9 +218,15 @@ def compute_mean_avg_prec(y_true, y_score):
 
 
 def get_vcocoeval(args, imageset):
-    return vsrl_eval.VCOCOeval(os.path.join(args.data_root, '..', 'v-coco/data/vcoco/vcoco_{}.json'.format(imageset)),
-                               os.path.join(args.data_root, '..', 'v-coco/data/instances_vcoco_all_2014.json'),
-                               os.path.join(args.data_root, '..', 'v-coco/data/splits/vcoco_{}.ids'.format(imageset)))
+    #print(os.path.join(args.data_root, '..', 'tmp/vcoco/vcoco_{}.json'.format(imageset)))
+    #print(os.path.join(args.data_root, '..', 'tmp/vcoco/instances_vcoco_all_2014.json'))
+    #print(os.path.join(args.data_root, '..', 'tmp/vcoco/vcoco_{}.ids'.format(imageset)))
+    #return vsrl_eval.VCOCOeval(os.path.join(args.data_root, '..', 'tmp/vcoco/vcoco_{}.json'.format(imageset)),
+    #                           os.path.join(args.data_root, '..', 'tmp/vcoco/instances_vcoco_all_2014.json'),
+    #                           os.path.join(args.data_root, '..', 'tmp/vcoco/vcoco_{}.ids'.format(imageset)))
+    return vsrl_eval.VCOCOeval(os.path.join('tmp/vcoco/vcoco_{}.json'.format(imageset)),
+                               os.path.join('tmp/vcoco/instances_vcoco_all_2014.json'),
+                               os.path.join('tmp/vcoco/vcoco_{}.ids'.format(imageset)))
 
 
 def main(args):
@@ -222,9 +266,9 @@ def main(args):
         mse_loss = mse_loss.cuda()
         multi_label_loss = multi_label_loss.cuda()
 
-    loaded_checkpoint = datasets.utils.load_best_checkpoint(args, model, optimizer)
-    if loaded_checkpoint:
-        args, best_epoch_error, avg_epoch_error, model, optimizer = loaded_checkpoint
+    #loaded_checkpoint = datasets.utils.load_best_checkpoint(args, model, optimizer)
+    #if loaded_checkpoint:
+    #    args, best_epoch_error, avg_epoch_error, model, optimizer = loaded_checkpoint
 
     epoch_errors = list()
     avg_epoch_error = np.inf
@@ -253,14 +297,14 @@ def main(args):
 
         is_best = epoch_error < best_epoch_error
         best_epoch_error = min(epoch_error, best_epoch_error)
-        datasets.utils.save_checkpoint({'epoch': epoch + 1, 'state_dict': model.state_dict(),
+        save_checkpoint({'epoch': epoch + 1, 'state_dict': model.state_dict(),
                                         'best_epoch_error': best_epoch_error, 'avg_epoch_error': avg_epoch_error,
                                         'optimizer': optimizer.state_dict(), },
                                        is_best=is_best, directory=args.resume)
         print('best_epoch_error: {}, avg_epoch_error: {}'.format(best_epoch_error,  avg_epoch_error))
 
     # For testing
-    loaded_checkpoint = datasets.utils.load_best_checkpoint(args, model, optimizer)
+    loaded_checkpoint = load_best_checkpoint(args, model, optimizer)
     if loaded_checkpoint:
         args, best_epoch_error, avg_epoch_error, model, optimizer = loaded_checkpoint
     validate(args, test_loader, model, mse_loss, multi_label_loss, test_vcocoeval, test=True)
@@ -281,6 +325,7 @@ def train(args, train_loader, model, mse_loss, multi_label_loss, optimizer, epoc
 
     end_time = time.time()
     for i, (edge_features, node_features, adj_mat, node_labels, node_roles, boxes, img_ids, img_names, human_nums, obj_nums, classes) in enumerate(train_loader):
+        # continue
         data_time.update(time.time() - end_time)
         optimizer.zero_grad()
 
@@ -300,7 +345,7 @@ def train(args, train_loader, model, mse_loss, multi_label_loss, optimizer, epoc
             y_true, y_score = evaluation(det_indices, pred_node_labels, node_labels, y_true, y_score)
 
         if not isinstance(loss, int):
-            losses.update(loss.data[0], edge_features.size()[0])
+            losses.update(loss.item(), edge_features.size()[0])
             loss.backward()
             optimizer.step()
 
@@ -348,6 +393,7 @@ def validate(args, val_loader, model, mse_loss, multi_label_loss, vcocoeval, log
 
     end = time.time()
     for i, (edge_features, node_features, adj_mat, node_labels, node_roles, boxes, img_ids, img_names, human_nums, obj_nums, classes) in enumerate(val_loader):
+        # continue
         edge_features = utils.to_variable(edge_features, args.cuda)
         node_features = utils.to_variable(node_features, args.cuda)
         adj_mat = utils.to_variable(adj_mat, args.cuda)
@@ -361,7 +407,7 @@ def validate(args, val_loader, model, mse_loss, multi_label_loss, vcocoeval, log
 
         # Log
         if len(det_indices) > 0:
-            losses.update(loss.data[0], len(det_indices))
+            losses.update(loss.item(), len(det_indices))
             y_true, y_score = evaluation(det_indices, pred_node_labels, node_labels, y_true, y_score, test=test)
 
         # measure elapsed time
@@ -422,7 +468,7 @@ def parse_arguments():
     parser.add_argument('--vis-top-k', type=int, default=1, metavar='N', help='Top k results to visualize')
 
     # Optimization Options
-    parser.add_argument('--batch-size', type=int, default=1, metavar='N',
+    parser.add_argument('--batch-size', type=int, default=32, metavar='N',
                         help='Input batch size for training (default: 10)')
     parser.add_argument('--no-cuda', action='store_true', default=False,
                         help='Enables CUDA training')
@@ -440,7 +486,7 @@ def parse_arguments():
                         help='SGD momentum (default: 0.9)')
 
     # i/o
-    parser.add_argument('--log-interval', type=int, default=100, metavar='N',
+    parser.add_argument('--log-interval', type=int, default=1, metavar='N',
                         help='How many batches to wait before logging training status')
     # Accelerating
     parser.add_argument('--prefetch', type=int, default=0, help='Pre-fetching threads.')
