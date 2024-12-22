@@ -32,8 +32,10 @@ def collate_fn_cad(batch):
     else:
         node_labels_batch = np.zeros((len(batch), max_node_num))
 
-    sequence_ids = list()
-    node_nums = list()
+    sequence_ids = []
+    node_nums = []
+    human_nums = []
+    obj_nums = []
     for i, (edge_features, node_features, adj_mat, node_labels, sequence_id) in enumerate(batch):
         node_num = adj_mat.shape[0]
         edge_features_batch[i, :, :node_num, :node_num] = edge_features
@@ -45,13 +47,16 @@ def collate_fn_cad(batch):
             node_labels_batch[i, :node_num] = node_labels
         sequence_ids.append(sequence_id)
         node_nums.append(node_num)
+        human_nums.append(1 if node_num >= 1 else 0)
+        obj_nums.append(node_num-1 if node_num >= 1 else 0)
 
     edge_features_batch = torch.FloatTensor(edge_features_batch)
     node_features_batch = torch.FloatTensor(node_features_batch)
     adj_mat_batch = torch.FloatTensor(adj_mat_batch)
     node_labels_batch = torch.FloatTensor(node_labels_batch)
 
-    return edge_features_batch, node_features_batch, adj_mat_batch, node_labels_batch, sequence_ids, node_nums
+    # return edge_features_batch, node_features_batch, adj_mat_batch, node_labels_batch, sequence_ids, node_nums
+    return edge_features_batch, node_features_batch, adj_mat_batch, node_labels_batch, human_nums, obj_nums
 
 
 def collate_fn_hico(batch):
@@ -68,15 +73,15 @@ def collate_fn_hico(batch):
     edge_features_batch = np.zeros((len(batch), max_node_num, max_node_num, edge_feature_len))
     node_features_batch = np.zeros((len(batch), max_node_num, node_feature_len))
     adj_mat_batch = np.zeros((len(batch), max_node_num, max_node_num))
-    sequence_ids = list()
+    # sequence_ids = []
     if node_label_dim > 1:
         node_labels_batch = np.zeros((len(batch), max_node_num, node_label_len))
     else:
         node_labels_batch = np.zeros((len(batch), max_node_num))
-    classes_batch = list()
-    boxes_batch = list()
-    human_nums = list()
-    obj_nums = list()
+    classes_batch = []
+    boxes_batch = []
+    human_nums = []
+    obj_nums = []
 
     for i, (edge_features, node_features, adj_mat, node_labels, sequence_id, det_classes, det_boxes, human_num, obj_num) in enumerate(batch):
 
@@ -88,7 +93,7 @@ def collate_fn_hico(batch):
             node_labels_batch[i, :node_num, :] = node_labels
         else:
             node_labels_batch[i, :node_num] = node_labels
-        sequence_ids.append(sequence_id)
+        # sequence_ids.append(sequence_id)
 
         boxes_batch.append(det_boxes)
         classes_batch.append(det_classes)
@@ -101,7 +106,8 @@ def collate_fn_hico(batch):
     adj_mat_batch = torch.FloatTensor(adj_mat_batch)
     node_labels_batch = torch.FloatTensor(node_labels_batch)
 
-    return edge_features_batch, node_features_batch, adj_mat_batch, node_labels_batch, sequence_ids, classes_batch, boxes_batch, human_nums, obj_nums
+    # return edge_features_batch, node_features_batch, adj_mat_batch, node_labels_batch, sequence_ids, classes_batch, boxes_batch, human_nums, obj_nums
+    return edge_features_batch, node_features_batch, adj_mat_batch, node_labels_batch, human_nums, obj_nums
 
 
 def collate_fn_vcoco(batch):
@@ -123,12 +129,12 @@ def collate_fn_vcoco(batch):
     else:
         node_labels_batch = np.zeros((len(batch), max_node_num))
     node_roles_batch = np.zeros((len(batch), max_node_num, node_role_num))
-    img_names = list()
-    img_ids = list()
-    boxes_batch = list()
-    human_nums = list()
-    obj_nums = list()
-    classes_batch = list()
+    img_names = []
+    img_ids = []
+    boxes_batch = []
+    human_nums = []
+    obj_nums = []
+    classes_batch = []
 
     for i, (edge_features, node_features, adj_mat, node_labels, node_roles, boxes, img_id, img_name, human_num, obj_num, classes) in enumerate(batch):
         node_num = adj_mat.shape[0]
@@ -152,46 +158,11 @@ def collate_fn_vcoco(batch):
     adj_mat_batch = torch.FloatTensor(adj_mat_batch)
     node_labels_batch = torch.FloatTensor(node_labels_batch)
     node_roles_batch = torch.FloatTensor(node_roles_batch)
+    # return edge_features_batch, node_features_batch, adj_mat_batch, node_labels_batch, node_roles_batch, boxes_batch, img_ids, img_names, human_nums, obj_nums, classes_batch
 
-    return edge_features_batch, node_features_batch, adj_mat_batch, node_labels_batch, node_roles_batch, boxes_batch, img_ids, img_names, human_nums, obj_nums, classes_batch
+    # return edge_features_batch, node_features_batch, adj_mat_batch, node_labels_batch, classes_batch, boxes_batch, human_nums, obj_nums
+    return edge_features_batch, node_features_batch, adj_mat_batch, node_labels_batch, human_nums, obj_nums
 
-
-def save_checkpoint(state, is_best, directory):
-    if not os.path.isdir(directory):
-        os.makedirs(directory)
-    checkpoint_file = os.path.join(directory, 'checkpoint.pth')
-    best_model_file = os.path.join(directory, 'model_best.pth')
-    torch.save(state, checkpoint_file)
-    if is_best:
-        shutil.copyfile(checkpoint_file, best_model_file)
-
-
-def load_best_checkpoint(args, model, optimizer):
-    # get the best checkpoint if available without training
-    if args.resume:
-        checkpoint_dir = args.resume
-        best_model_file = os.path.join(checkpoint_dir, 'model_best.pth')
-        if not os.path.isdir(checkpoint_dir):
-            os.makedirs(checkpoint_dir)
-        if os.path.isfile(best_model_file):
-            print("=> loading best model '{}'".format(best_model_file))
-            checkpoint = torch.load(best_model_file,encoding='latin1')
-            # checkpoint_str = {key.decode('latin1'): value for key, value in checkpoint.items()}
-            args.start_epoch = checkpoint['epoch']
-            best_epoch_error = checkpoint['best_epoch_error']
-            try:
-                avg_epoch_error = checkpoint['avg_epoch_error']
-            except KeyError:
-                avg_epoch_error = np.inf
-            model.load_state_dict(checkpoint['state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer'])
-            if args.cuda:
-                model.cuda()
-            print("=> loaded best model '{}' (epoch {})".format(best_model_file, checkpoint['epoch']))
-            return args, best_epoch_error, avg_epoch_error, model, optimizer
-        else:
-            print("=> no best model found at '{}'".format(best_model_file))
-    return None
 
 
 def main():

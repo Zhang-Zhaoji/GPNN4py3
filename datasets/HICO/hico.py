@@ -36,9 +36,9 @@ class HICO(torch.utils.data.Dataset):
 
         edge_features = np.load(os.path.join(self.root, '{}_edge_features.npy').format(sequence_id))
         node_features = np.load(os.path.join(self.root, '{}_node_features.npy').format(sequence_id))
+        
         adj_mat = data['adj_mat']
         node_labels = data['node_labels']
-
         return edge_features, node_features, adj_mat, node_labels, sequence_id, det_classes, det_boxes, human_num, obj_num
 
     def __len__(self):

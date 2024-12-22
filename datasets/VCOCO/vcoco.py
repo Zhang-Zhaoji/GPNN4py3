@@ -39,6 +39,7 @@ class VCOCO(torch.utils.data.Dataset):
             data = pickle.load(open(os.path.join(self.root, '{}.p'.format(img_name)), 'rb'),encoding='latin1')
             edge_features = np.load(os.path.join(self.root, '{}_edge_features.npy').format(img_name))
             node_features = np.load(os.path.join(self.root, '{}_node_features.npy').format(img_name))
+            
         except IOError:
             # warnings.warn('data missing for {}'.format(img_name))
             return self.__getitem__(0)

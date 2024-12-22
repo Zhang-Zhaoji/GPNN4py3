@@ -12,7 +12,6 @@ import argparse
 import time
 import datetime
 import pickle
-import shutil
 
 import numpy as np
 import torch
@@ -27,43 +26,6 @@ import models
 import config
 import logutil
 import utils
-
-def save_checkpoint(state, is_best, directory):
-    if not os.path.isdir(directory):
-        os.makedirs(directory)
-    checkpoint_file = os.path.join(directory, 'checkpoint.pth')
-    best_model_file = os.path.join(directory, 'model_best.pth')
-    torch.save(state, checkpoint_file)
-    if is_best:
-        shutil.copyfile(checkpoint_file, best_model_file)
-        
-
-def load_best_checkpoint(args, model, optimizer):
-    # get the best checkpoint if available without training
-    if args.resume:
-        checkpoint_dir = args.resume
-        best_model_file = os.path.join(checkpoint_dir, 'model_best.pth')
-        if not os.path.isdir(checkpoint_dir):
-            os.makedirs(checkpoint_dir)
-        if os.path.isfile(best_model_file):
-            print("=> loading best model '{}'".format(best_model_file))
-            checkpoint = torch.load(best_model_file,encoding='latin1')
-            # checkpoint_str = {key.decode('latin1'): value for key, value in checkpoint.items()}
-            args.start_epoch = checkpoint['epoch']
-            best_epoch_error = checkpoint['best_epoch_error']
-            try:
-                avg_epoch_error = checkpoint['avg_epoch_error']
-            except KeyError:
-                avg_epoch_error = np.inf
-            model.load_state_dict(checkpoint['state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer'])
-            if args.cuda:
-                model.cuda()
-            print("=> loaded best model '{}' (epoch {})".format(best_model_file, checkpoint['epoch']))
-            return args, best_epoch_error, avg_epoch_error, model, optimizer
-        else:
-            print("=> no best model found at '{}'".format(best_model_file))
-    return None
 
 action_class_num = len(datasets.vcoco_metadata.action_classes)
 roles_num = len(datasets.vcoco_metadata.roles)
@@ -161,11 +123,10 @@ def weighted_loss(output, target):
     return torch.nn.MultiLabelSoftMarginLoss(weight=weight_mask).cuda()(output, target)
 
 
-def loss_fn(pred_adj_mat, adj_mat, pred_node_labels, node_labels, pred_node_roles, node_roles, human_nums, obj_nums, mse_loss, multi_label_loss):
+def loss_fn(pred_adj_mat, adj_mat, pred_node_labels, node_labels, human_nums, obj_nums, mse_loss, multi_label_loss):
     det_indices = list()
     pred_adj_mat_prob = torch.nn.Sigmoid()(pred_adj_mat)
     np_pred_adj_mat = pred_adj_mat_prob.data.cpu().numpy()
-    np_adj_mat = adj_mat.data.cpu().numpy()
     det_indices = list()
 
     batch_size = pred_adj_mat.size()[0]
@@ -176,30 +137,11 @@ def loss_fn(pred_adj_mat, adj_mat, pred_node_labels, node_labels, pred_node_role
                 # if np_pred_adj_mat[batch_i, i, j] > 0.5:
                 # if np_adj_mat[batch_i, i, j] == 1:
                 det_indices.append((batch_i, i, j, np_pred_adj_mat[batch_i, i, j]))
-
-    # Loss for labels and adjacency matrices
-    # loss = multi_label_loss(pred_node_labels.view(-1, hoi_class_num), node_labels.view(-1, hoi_class_num)) + multi_label_loss(pred_adj_mat.view(batch_size, -1), adj_mat.view(batch_size, -1))
-    # loss = weighted_loss(pred_node_labels.view(-1, action_class_num), node_labels.view(-1, action_class_num))
-    # loss = weighted_loss(pred_node_labels.view(-1, action_class_num), node_labels.view(-1, action_class_num)) + weighted_loss(pred_adj_mat, adj_mat)
-
     loss = 0
     batch_size = pred_node_labels.size()[0]
     for batch_i in range(batch_size):
         node_num = human_nums[batch_i] + obj_nums[batch_i]
         loss = weighted_loss(pred_node_labels[batch_i, :node_num, :].view(-1, action_class_num), node_labels[batch_i, :node_num, :].view(-1, action_class_num)) + weighted_loss(pred_adj_mat[batch_i, :node_num, :node_num], adj_mat[batch_i, :node_num, :node_num])
-
-        # Ablative analysis
-        # loss = weighted_loss(pred_node_labels[batch_i, :node_num, :].view(-1, action_class_num),
-        #                  node_labels[batch_i, :node_num, :].view(-1, action_class_num))
-
-    # # MSE loss for roles prediction
-    # loss += mse_loss(pred_node_roles, node_roles)
-
-    # Cross entropy loss for roles prediction
-    ce_loss = torch.nn.CrossEntropyLoss().cuda()
-    _, roles_indices = torch.max(node_roles, 2)
-    loss += ce_loss(pred_node_roles.view(-1, roles_num), roles_indices.view(-1))
-
     return det_indices, loss
 
 
@@ -218,15 +160,9 @@ def compute_mean_avg_prec(y_true, y_score):
 
 
 def get_vcocoeval(args, imageset):
-    #print(os.path.join(args.data_root, '..', 'tmp/vcoco/vcoco_{}.json'.format(imageset)))
-    #print(os.path.join(args.data_root, '..', 'tmp/vcoco/instances_vcoco_all_2014.json'))
-    #print(os.path.join(args.data_root, '..', 'tmp/vcoco/vcoco_{}.ids'.format(imageset)))
-    #return vsrl_eval.VCOCOeval(os.path.join(args.data_root, '..', 'tmp/vcoco/vcoco_{}.json'.format(imageset)),
-    #                           os.path.join(args.data_root, '..', 'tmp/vcoco/instances_vcoco_all_2014.json'),
-    #                           os.path.join(args.data_root, '..', 'tmp/vcoco/vcoco_{}.ids'.format(imageset)))
-    return vsrl_eval.VCOCOeval(os.path.join('tmp/vcoco/vcoco_{}.json'.format(imageset)),
-                               os.path.join('tmp/vcoco/instances_vcoco_all_2014.json'),
-                               os.path.join('tmp/vcoco/vcoco_{}.ids'.format(imageset)))
+    return vsrl_eval.VCOCOeval(os.path.join(args.data_root,  'vcoco_{}.json'.format(imageset)),
+                               os.path.join(args.data_root,  'instances_vcoco_all_2014.json'),
+                               os.path.join(args.data_root,  'vcoco_{}.ids'.format(imageset)))
 
 
 def main(args):
@@ -244,16 +180,10 @@ def main(args):
     # Evaluation setup
     if not os.path.exists(args.eval_root):
         os.makedirs(args.eval_root)
-    train_vcocoeval = get_vcocoeval(args, 'train')
-    val_vcocoeval = get_vcocoeval(args, 'val')
-    test_vcocoeval = get_vcocoeval(args, 'test')
 
     # Get data size and define model
     edge_features, node_features, adj_mat, node_labels, node_roles, boxes, img_id, img_name, human_num, obj_num, classes = training_set[0]
     edge_feature_size, node_feature_size = edge_features.shape[2], node_features.shape[1]
-    # message_size = int(edge_feature_size/2)*2
-    # message_size = edge_feature_size*2
-    # message_size = 1024
     message_size = edge_feature_size
     model_args = {'model_path': args.resume, 'edge_feature_size': edge_feature_size, 'node_feature_size': node_feature_size, 'message_size': message_size, 'link_hidden_size': 256, 'link_hidden_layers': 3, 'link_relu': False, 'update_hidden_layers': 1, 'update_dropout': False, 'update_bias': True, 'propagate_layers': 3, 'hoi_classes': action_class_num, 'roles_num': roles_num, 'resize_feature_to_message_size': False, 'feature_type': args.feature_type}
     model = models.GPNN_VCOCO(model_args)
@@ -277,9 +207,9 @@ def main(args):
         logger.log_value('learning_rate', args.lr).step()
 
         # train for one epoch
-        train(args, train_loader, model, mse_loss, multi_label_loss, optimizer, epoch, train_vcocoeval, logger)
+        train(args, train_loader, model, mse_loss, multi_label_loss, optimizer, epoch, logger)
         # test on validation set
-        epoch_error = validate(args, valid_loader, model, mse_loss, multi_label_loss, val_vcocoeval, logger)
+        epoch_error = validate(args, valid_loader, model, mse_loss, multi_label_loss, logger)
 
         epoch_errors.append(epoch_error)
         if len(epoch_errors) == 2:
@@ -297,21 +227,21 @@ def main(args):
 
         is_best = epoch_error < best_epoch_error
         best_epoch_error = min(epoch_error, best_epoch_error)
-        save_checkpoint({'epoch': epoch + 1, 'state_dict': model.state_dict(),
+        datasets.utils.save_checkpoint({'epoch': epoch + 1, 'state_dict': model.state_dict(),
                                         'best_epoch_error': best_epoch_error, 'avg_epoch_error': avg_epoch_error,
                                         'optimizer': optimizer.state_dict(), },
                                        is_best=is_best, directory=args.resume)
         print('best_epoch_error: {}, avg_epoch_error: {}'.format(best_epoch_error,  avg_epoch_error))
 
     # For testing
-    loaded_checkpoint = load_best_checkpoint(args, model, optimizer)
+    loaded_checkpoint = datasets.utils.load_best_checkpoint(args, model, optimizer)
     if loaded_checkpoint:
         args, best_epoch_error, avg_epoch_error, model, optimizer = loaded_checkpoint
-    validate(args, test_loader, model, mse_loss, multi_label_loss, test_vcocoeval, test=True)
+    validate(args, test_loader, model, mse_loss, multi_label_loss, test=True)
     print('Time elapsed: {:.2f}s'.format(time.time() - start_time))
 
 
-def train(args, train_loader, model, mse_loss, multi_label_loss, optimizer, epoch, vcocoeval, logger):
+def train(args, train_loader, model, mse_loss, multi_label_loss, optimizer, epoch, logger):
     batch_time = logutil.AverageMeter()
     data_time = logutil.AverageMeter()
     losses = logutil.AverageMeter()
@@ -325,7 +255,6 @@ def train(args, train_loader, model, mse_loss, multi_label_loss, optimizer, epoc
 
     end_time = time.time()
     for i, (edge_features, node_features, adj_mat, node_labels, node_roles, boxes, img_ids, img_names, human_nums, obj_nums, classes) in enumerate(train_loader):
-        # continue
         data_time.update(time.time() - end_time)
         optimizer.zero_grad()
 
@@ -333,12 +262,9 @@ def train(args, train_loader, model, mse_loss, multi_label_loss, optimizer, epoc
         node_features = utils.to_variable(node_features, args.cuda)
         adj_mat = utils.to_variable(adj_mat, args.cuda)
         node_labels = utils.to_variable(node_labels, args.cuda)
-        node_roles = utils.to_variable(node_roles, args.cuda)
 
-        pred_adj_mat, pred_node_labels, pred_node_roles = model(edge_features, node_features, adj_mat, node_labels, node_roles, human_nums, obj_nums, args)
-        det_indices, loss = loss_fn(pred_adj_mat, adj_mat, pred_node_labels, node_labels, pred_node_roles, node_roles, human_nums, obj_nums, mse_loss, multi_label_loss)
-        append_results(pred_adj_mat, adj_mat, pred_node_labels, node_labels, pred_node_roles, node_roles, img_ids,
-                       boxes, human_nums, obj_nums, classes, all_results)
+        pred_adj_mat, pred_node_labels = model(edge_features, node_features, adj_mat, node_labels, node_roles, human_nums, obj_nums, args)
+        det_indices, loss = loss_fn(pred_adj_mat, adj_mat, pred_node_labels, node_labels, node_roles, human_nums, obj_nums, mse_loss, multi_label_loss)
 
         # Log and back propagate
         if len(det_indices) > 0:
@@ -375,7 +301,7 @@ def train(args, train_loader, model, mse_loss, multi_label_loss, optimizer, epoc
           .format(epoch, map=mean_avg_prec, loss=losses, b_time=batch_time))
 
 
-def validate(args, val_loader, model, mse_loss, multi_label_loss, vcocoeval, logger=None, test=False):
+def validate(args, val_loader, model, mse_loss, multi_label_loss, logger=None, test=False):
     if args.visualize:
         result_folder = os.path.join(args.tmp_root, 'results/VCOCO/detections/', 'top'+str(args.vis_top_k))
         if not os.path.exists(result_folder):
@@ -393,7 +319,6 @@ def validate(args, val_loader, model, mse_loss, multi_label_loss, vcocoeval, log
 
     end = time.time()
     for i, (edge_features, node_features, adj_mat, node_labels, node_roles, boxes, img_ids, img_names, human_nums, obj_nums, classes) in enumerate(val_loader):
-        # continue
         edge_features = utils.to_variable(edge_features, args.cuda)
         node_features = utils.to_variable(node_features, args.cuda)
         adj_mat = utils.to_variable(adj_mat, args.cuda)
@@ -426,7 +351,7 @@ def validate(args, val_loader, model, mse_loss, multi_label_loss, vcocoeval, log
 
     mean_avg_prec = compute_mean_avg_prec(y_true, y_score)
     if test:
-        vcoco_evaluation(args, vcocoeval, 'test', all_results)
+        # vcoco_evaluation(args, vcocoeval, 'test', all_results)
         if args.visualize:
             utils.visualize_vcoco_result(args, result_folder, all_results)
     else:
@@ -453,7 +378,7 @@ def parse_arguments():
 
     paths = config.Paths()
 
-    feature_type = 'resnet'
+    feature_type = 'vcoco_features'
 
     # Path settings
     parser = argparse.ArgumentParser(description='VCOCO dataset')
@@ -468,7 +393,7 @@ def parse_arguments():
     parser.add_argument('--vis-top-k', type=int, default=1, metavar='N', help='Top k results to visualize')
 
     # Optimization Options
-    parser.add_argument('--batch-size', type=int, default=32, metavar='N',
+    parser.add_argument('--batch-size', type=int, default=1, metavar='N',
                         help='Input batch size for training (default: 10)')
     parser.add_argument('--no-cuda', action='store_true', default=False,
                         help='Enables CUDA training')
@@ -486,7 +411,7 @@ def parse_arguments():
                         help='SGD momentum (default: 0.9)')
 
     # i/o
-    parser.add_argument('--log-interval', type=int, default=1, metavar='N',
+    parser.add_argument('--log-interval', type=int, default=100, metavar='N',
                         help='How many batches to wait before logging training status')
     # Accelerating
     parser.add_argument('--prefetch', type=int, default=0, help='Pre-fetching threads.')

@@ -34,7 +34,7 @@ class VCOCOeval(object):
     split_file: image ids for split
     """
     print(coco_annot_file)
-    # coco_annot_file = coco_annot_file.replace("/","\\")
+    coco_annot_file = coco_annot_file.replace("/","\\")
     self.COCO = COCO(coco_annot_file)
     self.VCOCO = _load_vcoco(vsrl_annot_file)
     self.image_ids = np.loadtxt(open(split_file, 'r'))

@@ -27,7 +27,7 @@ def get_data_dir():
   # need seet True dir place for instances_vcoco_all_2014.json
   this_dir = os.path.dirname(__file__)
   dir_name = os.path.join(this_dir, 'data') 
-  dir_name = 'tmp/vcoco'
+  dir_name = 'e:\\gpnn\\gpnn\\tmp\\vcoco'
   return dir_name
 
 def load_coco(dir_name=None):
