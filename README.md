@@ -1,4 +1,4 @@
-Readme
+## Readme
 
 We did three different experiments using this framework. 
 
@@ -8,7 +8,7 @@ We did three different experiments using this framework.
 
 we (will) also provide .ipynb files with 
 
-'!python main.py'
+`!python main.py`
 
 to show you what our terminal show.
 
